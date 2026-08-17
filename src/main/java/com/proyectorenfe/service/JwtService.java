@@ -25,4 +25,28 @@ public class JwtService {
                 .signWith(key)
                 .compact();
     }
+
+    public String extraerEmail(String token) {
+
+        return Jwts.parser()
+                .verifyWith(key)
+                .build()
+                .parseSignedClaims(token)
+                .getPayload()
+                .getSubject();
+    }
+
+    public boolean esTokenValido(String token, String email) {
+
+        try {
+
+            String emailToken = extraerEmail(token);
+
+            return emailToken.equals(email);
+
+        } catch (Exception e) {
+
+            return false;
+        }
+    }
 }

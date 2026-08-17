@@ -21,16 +21,23 @@ public class Tren {
     @Column(nullable = false)
     private String estado;
 
-    Tren(){
+    @Column(nullable = false)
+    private Integer numeroVagones;
+
+    @Column(nullable = false)
+    private Integer asientosPorVagon;
+
+    public Tren(){
 
     }
 
-    public Tren(Long id, String numero, String modelo, int capacidad, String estado) {
-        this.id = id;
+    public Tren(String numero, String modelo, int capacidad, String estado, Integer numeroVagones, Integer asientosPorVagon) {
         this.numero = numero;
         this.modelo = modelo;
         this.capacidad = capacidad;
         this.estado = estado;
+        this.numeroVagones = numeroVagones;
+        this.asientosPorVagon = asientosPorVagon;
     }
 
     public Long getId() {
@@ -71,5 +78,21 @@ public class Tren {
 
     public void setEstado(String estado) {
         this.estado = estado;
+    }
+
+    public Integer getNumeroVagones() {
+        return numeroVagones;
+    }
+
+    public void setNumeroVagones(Integer numeroVagones) {
+        this.numeroVagones = numeroVagones;
+    }
+
+    public Integer getAsientosPorVagon() {
+        return asientosPorVagon;
+    }
+
+    public void setAsientosPorVagon(Integer asientosPorVagon) {
+        this.asientosPorVagon = asientosPorVagon;
     }
 }
