@@ -27,6 +27,17 @@ function App() {
 
   const [errorReserva, setErrorReserva] = useState("");
 
+  const [nombreRegistro, setNombreRegistro] = useState("");
+  const [emailRegistro, setEmailRegistro] = useState("");
+  const [contrasenaRegistro, setContrasenaRegistro] = useState("");
+  const [confirmarContrasena, setConfirmarContrasena] = useState("");
+  const [errorRegistro, setErrorRegistro] = useState("");
+  const [registroCorrecto, setRegistroCorrecto] = useState(false);
+
+  function formatearHora(hora) {
+            return hora ? hora.slice(0, 5) : "";
+      }
+
   const origenes = Array.from(
     new Map(rutas.map((ruta) => [ruta.origen.id, ruta.origen])).values()
   );
@@ -59,10 +70,6 @@ function App() {
       return;
     }
 
-    function formatearHora(hora) {
-      return hora ? hora.slice(0, 5) : "";
-    }
-
     async function cargarAsientos() {
       try {
         setCargandoAsientos(true);
@@ -92,6 +99,7 @@ function App() {
     if (vista !== "misViajes" || !usuario) {
       return;
     }
+
 
     async function cargarMisViajes() {
       try {
@@ -171,6 +179,78 @@ function App() {
     } catch (error) {
       setError(error.message);
     }
+  }
+
+  async function registrarUsuario(evento) {
+      evento.preventDefault();
+
+      setErrorRegistro("");
+      setRegistroCorrecto(false);
+
+      if (
+          !nombreRegistro.trim() ||
+          !emailRegistro.trim() ||
+          !contrasenaRegistro.trim() ||
+          !confirmarContrasena.trim()
+      ) {
+          setErrorRegistro("Completa todos los campos.");
+          return;
+      }
+
+      if (contrasenaRegistro.length < 6) {
+          setErrorRegistro(
+              "La contraseña debe tener al menos 6 caracteres."
+          );
+          return;
+      }
+
+      if (contrasenaRegistro !== confirmarContrasena) {
+          setErrorRegistro("Las contraseñas no coinciden.");
+          return;
+      }
+
+      try {
+          const respuesta = await fetch(
+              "http://localhost:8081/usuarios/registro",
+              {
+                  method: "POST",
+                  headers: {
+                      "Content-Type": "application/json",
+                  },
+                  body: JSON.stringify({
+                      nombre: nombreRegistro,
+                      email: emailRegistro,
+                      password: contrasenaRegistro,
+                  }),
+              }
+          );
+
+          if (!respuesta.ok) {
+              let mensaje = "No se pudo crear la cuenta.";
+
+              try {
+                  const datos = await respuesta.json();
+
+                  if (datos.message) {
+                      mensaje = datos.message;
+                  }
+              } catch {
+                  // El servidor no devolvió JSON
+              }
+
+              throw new Error(mensaje);
+          }
+
+          setRegistroCorrecto(true);
+
+          setNombreRegistro("");
+          setEmailRegistro("");
+          setContrasenaRegistro("");
+          setConfirmarContrasena("");
+
+      } catch (error) {
+          setErrorRegistro(error.message);
+      }
   }
 
   function cerrarSesion() {
@@ -262,51 +342,199 @@ function App() {
     }
   }
 
-  setMisViajes((viajesActuales) => [...viajesActuales, nuevaReserva]);
-  setReservaConfirmada(true);
-
 
   function volverInicio() {
     setVista("inicio");
     setBusquedaRealizada(false);
   }
 
+  if (!usuario && vista === "registro") {
+      return (
+          <main className="pagina">
+              <section className="login">
+
+                  <p className="marca">RENFE</p>
+
+                  <h1>Crear cuenta</h1>
+
+                  <p className="subtitulo">
+                      Regístrate para gestionar tus viajes.
+                  </p>
+
+                  <form onSubmit={registrarUsuario}>
+
+                      <label htmlFor="nombreRegistro">
+                          Nombre
+                      </label>
+
+                      <input
+                          id="nombreRegistro"
+                          type="text"
+                          value={nombreRegistro}
+                          onChange={(evento) =>
+                              setNombreRegistro(evento.target.value)
+                          }
+                          placeholder="Tu nombre"
+                      />
+
+                      <label htmlFor="emailRegistro">
+                          Correo electrónico
+                      </label>
+
+                      <input
+                          id="emailRegistro"
+                          type="email"
+                          value={emailRegistro}
+                          onChange={(evento) =>
+                              setEmailRegistro(evento.target.value)
+                          }
+                          placeholder="tu@email.com"
+                      />
+
+                      <label htmlFor="contrasenaRegistro">
+                          Contraseña
+                      </label>
+
+                      <input
+                          id="contrasenaRegistro"
+                          type="password"
+                          value={contrasenaRegistro}
+                          onChange={(evento) =>
+                              setContrasenaRegistro(evento.target.value)
+                          }
+                          placeholder="Mínimo 6 caracteres"
+                      />
+
+                      <label htmlFor="confirmarContrasena">
+                          Repetir contraseña
+                      </label>
+
+                      <input
+                          id="confirmarContrasena"
+                          type="password"
+                          value={confirmarContrasena}
+                          onChange={(evento) =>
+                              setConfirmarContrasena(evento.target.value)
+                          }
+                          placeholder="Repite tu contraseña"
+                      />
+
+                      {errorRegistro && (
+                          <p className="error">
+                              {errorRegistro}
+                          </p>
+                      )}
+
+                      {registroCorrecto && (
+                          <p className="exito">
+                              Cuenta creada correctamente. Ya puedes iniciar sesión.
+                          </p>
+                      )}
+
+                      <button
+                          className="boton-principal"
+                          type="submit"
+                      >
+                          Crear cuenta
+                      </button>
+
+                  </form>
+
+                  <p className="texto-registro">
+                      ¿Ya tienes una cuenta?{" "}
+                      <button
+                          type="button"
+                          className="enlace-registro"
+                          onClick={() => {
+                              setVista("inicio");
+                              setErrorRegistro("");
+                              setRegistroCorrecto(false);
+                          }}
+                      >
+                          Iniciar sesión
+                      </button>
+                  </p>
+
+              </section>
+          </main>
+      );
+  }
+
   if (!usuario) {
-    return (
-      <main className="pagina">
-        <section className="login">
-          <p className="marca">RENFE</p>
-          <h1>Bienvenido</h1>
-          <p className="subtitulo">Inicia sesión para gestionar tus viajes.</p>
+      return (
+          <main className="pagina">
+              <section className="login">
 
-          <form onSubmit={iniciarSesion}>
-            <label htmlFor="email">Correo electrónico</label>
-            <input
-              id="email"
-              type="email"
-              value={email}
-              onChange={(evento) => setEmail(evento.target.value)}
-              placeholder="tu@email.com"
-            />
+                  <p className="marca">RENFE</p>
 
-            <label htmlFor="contrasena">Contraseña</label>
-            <input
-              id="contrasena"
-              type="password"
-              value={contrasena}
-              onChange={(evento) => setContrasena(evento.target.value)}
-              placeholder="Introduce tu contraseña"
-            />
+                  <h1>Bienvenido</h1>
 
-            {error && <p className="error">{error}</p>}
+                  <p className="subtitulo">
+                      Inicia sesión para gestionar tus viajes.
+                  </p>
 
-            <button className="boton-principal" type="submit">
-              Iniciar sesión
-            </button>
-          </form>
-        </section>
-      </main>
-    );
+                  <form onSubmit={iniciarSesion}>
+
+                      <label htmlFor="email">
+                          Correo electrónico
+                      </label>
+
+                      <input
+                          id="email"
+                          type="email"
+                          value={email}
+                          onChange={(evento) =>
+                              setEmail(evento.target.value)
+                          }
+                          placeholder="tu@email.com"
+                      />
+
+                      <label htmlFor="contrasena">
+                          Contraseña
+                      </label>
+
+                      <input
+                          id="contrasena"
+                          type="password"
+                          value={contrasena}
+                          onChange={(evento) =>
+                              setContrasena(evento.target.value)
+                          }
+                          placeholder="Introduce tu contraseña"
+                      />
+
+                      {error && (
+                          <p className="error">
+                              {error}
+                          </p>
+                      )}
+
+                      <button
+                          className="boton-principal"
+                          type="submit"
+                      >
+                          Iniciar sesión
+                      </button>
+
+                  </form>
+
+                  <p className="texto-registro">
+                      ¿No tienes una cuenta?{" "}
+                      <button
+                          type="button"
+                          className="enlace-registro"
+                          onClick={() => {
+                              setVista("registro");
+                              setError("");
+                          }}
+                      >
+                          Crear cuenta
+                      </button>
+                  </p>
+
+              </section>
+          </main>
+      );
   }
 
   return (

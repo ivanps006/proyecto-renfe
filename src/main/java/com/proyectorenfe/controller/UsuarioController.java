@@ -11,6 +11,8 @@ import com.proyectorenfe.service.JwtService;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 import java.util.Optional;
@@ -43,8 +45,18 @@ public class UsuarioController {
     }
 
     @PostMapping("/registro")
-    public String crearUsuario(@RequestBody RegistroUsuarioDTO registroUsuarioDTO){
-        String passwordCifrada = passwordEncoder.encode(registroUsuarioDTO.getPassword());
+    @ResponseStatus(HttpStatus.CREATED)
+    public String crearUsuario(@RequestBody RegistroUsuarioDTO registroUsuarioDTO) {
+
+        if (usuarioRepository.findByEmail(registroUsuarioDTO.getEmail()).isPresent()) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "El correo electrónico ya está registrado"
+            );
+        }
+
+        String passwordCifrada =
+                passwordEncoder.encode(registroUsuarioDTO.getPassword());
 
         Usuario usuario = new Usuario(
                 registroUsuarioDTO.getNombre(),
