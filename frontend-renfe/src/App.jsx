@@ -1,69 +1,223 @@
-import { useState } from "react";
-
-const letrasAsiento = ["A", "B", "C", "D"];
-
-const asientosOcupados = ["V1-1C", "V1-3B", "V1-5D", "V2-2A", "V2-4C"];
+import { useEffect, useState } from "react";
 
 function App() {
-  const [usuario, setUsuario] = useState("");
+  const [email, setEmail] = useState("");
   const [contrasena, setContrasena] = useState("");
-  const [sesionIniciada, setSesionIniciada] = useState(false);
+  const [usuario, setUsuario] = useState(null);
   const [error, setError] = useState("");
 
   const [vista, setVista] = useState("inicio");
-  const [origen, setOrigen] = useState("");
-  const [destino, setDestino] = useState("");
+
+  const [rutas, setRutas] = useState([]);
+  const [origenId, setOrigenId] = useState("");
+  const [destinoId, setDestinoId] = useState("");
   const [fecha, setFecha] = useState("");
+  const [viajes, setViajes] = useState([]);
   const [busquedaRealizada, setBusquedaRealizada] = useState(false);
   const [errorBusqueda, setErrorBusqueda] = useState("");
 
   const [viajeSeleccionado, setViajeSeleccionado] = useState(null);
+  const [vagones, setVagones] = useState([]);
+  const [cargandoAsientos, setCargandoAsientos] = useState(false);
+  const [errorAsientos, setErrorAsientos] = useState("");
   const [asientoSeleccionado, setAsientoSeleccionado] = useState(null);
 
-  function iniciarSesion(evento) {
-    evento.preventDefault();
+  const [reservaConfirmada, setReservaConfirmada] = useState(false);
+  const [misViajes, setMisViajes] = useState([]);
 
-    if (!usuario.trim() || !contrasena.trim()) {
-      setError("Introduce tu usuario y tu contraseña.");
+  const [errorReserva, setErrorReserva] = useState("");
+
+  const origenes = Array.from(
+    new Map(rutas.map((ruta) => [ruta.origen.id, ruta.origen])).values()
+  );
+
+  const destinosDisponibles = rutas
+    .filter((ruta) => ruta.origen.id === Number(origenId))
+    .map((ruta) => ruta.destino);
+
+  useEffect(() => {
+    async function cargarRutas() {
+      try {
+        const respuesta = await fetch("http://localhost:8081/rutas");
+
+        if (!respuesta.ok) {
+          throw new Error("No se pudieron cargar las rutas.");
+        }
+
+        const datos = await respuesta.json();
+        setRutas(datos);
+      } catch (error) {
+        setErrorBusqueda(error.message);
+      }
+    }
+
+    cargarRutas();
+  }, []);
+
+  useEffect(() => {
+    if (vista !== "asientos" || !viajeSeleccionado) {
       return;
     }
 
-    setError("");
-    setSesionIniciada(true);
+    function formatearHora(hora) {
+      return hora ? hora.slice(0, 5) : "";
+    }
+
+    async function cargarAsientos() {
+      try {
+        setCargandoAsientos(true);
+        setErrorAsientos("");
+
+        const respuesta = await fetch(
+          `http://localhost:8081/viajes/${viajeSeleccionado.id}/asientos`
+        );
+
+        if (!respuesta.ok) {
+          throw new Error("No se pudieron cargar los asientos.");
+        }
+
+        const datos = await respuesta.json();
+        setVagones(datos);
+      } catch (error) {
+        setErrorAsientos(error.message);
+      } finally {
+        setCargandoAsientos(false);
+      }
+    }
+
+    cargarAsientos();
+  }, [vista, viajeSeleccionado]);
+
+  useEffect(() => {
+    if (vista !== "misViajes" || !usuario) {
+      return;
+    }
+
+    async function cargarMisViajes() {
+      try {
+        const token = localStorage.getItem("token");
+
+        const respuesta = await fetch(
+          "http://localhost:8081/reservas/mis-reservas",
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        );
+
+        if (!respuesta.ok) {
+          throw new Error("No se pudieron cargar tus viajes.");
+        }
+
+        const datos = await respuesta.json();
+        setMisViajes(datos);
+      } catch (error) {
+        setErrorReserva(error.message);
+      }
+    }
+
+    cargarMisViajes();
+  }, [vista, usuario]);
+
+  async function iniciarSesion(evento) {
+    evento.preventDefault();
+
+    if (!email.trim() || !contrasena.trim()) {
+      setError("Introduce tu correo electrónico y tu contraseña.");
+      return;
+    }
+
+    try {
+      setError("");
+
+      const respuestaLogin = await fetch(
+        "http://localhost:8081/usuarios/login",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            email,
+            password: contrasena,
+          }),
+        }
+      );
+
+      const datosLogin = await respuestaLogin.json();
+
+      if (!respuestaLogin.ok || !datosLogin.token) {
+        throw new Error("Correo electrónico o contraseña incorrectos.");
+      }
+
+      localStorage.setItem("token", datosLogin.token);
+
+      const respuestaPerfil = await fetch(
+        "http://localhost:8081/usuarios/perfil",
+        {
+          headers: {
+            Authorization: `Bearer ${datosLogin.token}`,
+          },
+        }
+      );
+
+      if (!respuestaPerfil.ok) {
+        throw new Error("No se pudo obtener el perfil del usuario.");
+      }
+
+      const perfil = await respuestaPerfil.json();
+      setUsuario(perfil);
+    } catch (error) {
+      setError(error.message);
+    }
   }
 
   function cerrarSesion() {
-    setSesionIniciada(false);
-    setUsuario("");
+    localStorage.removeItem("token");
+    setUsuario(null);
+    setEmail("");
     setContrasena("");
     setVista("inicio");
   }
 
-  function buscarViajes(evento) {
+  async function buscarViajes(evento) {
     evento.preventDefault();
 
-    if (!origen.trim() || !destino.trim() || !fecha) {
+    if (!origenId || !destinoId || !fecha) {
       setErrorBusqueda("Completa origen, destino y fecha.");
       return;
     }
 
-    setErrorBusqueda("");
-    setBusquedaRealizada(true);
+    try {
+      setErrorBusqueda("");
+
+      const parametros = new URLSearchParams({
+        origen: origenId,
+        destino: destinoId,
+        fecha,
+      });
+
+      const respuesta = await fetch(
+        `http://localhost:8081/viajes/buscar?${parametros}`
+      );
+
+      if (!respuesta.ok) {
+        throw new Error("No se pudieron buscar los viajes.");
+      }
+
+      const datos = await respuesta.json();
+      setViajes(datos);
+      setBusquedaRealizada(true);
+    } catch (error) {
+      setErrorBusqueda(error.message);
+    }
   }
 
-  function volverInicio() {
-    setVista("inicio");
-    setBusquedaRealizada(false);
-  }
-
-  function seleccionarViaje(horaSalida, horaLlegada, precio) {
-    setViajeSeleccionado({
-      horaSalida,
-      horaLlegada,
-      precio,
-    });
-
+  function seleccionarViaje(viaje) {
+    setViajeSeleccionado(viaje);
     setAsientoSeleccionado(null);
+    setReservaConfirmada(false);
     setVista("asientos");
   }
 
@@ -73,7 +227,51 @@ function App() {
     }
   }
 
-  if (!sesionIniciada) {
+  async function confirmarReserva() {
+    try {
+      setErrorReserva("");
+
+      const token = localStorage.getItem("token");
+
+      if (!token) {
+        throw new Error("Tu sesión ha caducado. Inicia sesión de nuevo.");
+      }
+
+      const respuesta = await fetch("http://localhost:8081/reservas", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          viajeId: viajeSeleccionado.id,
+          asiento: asientoSeleccionado,
+        }),
+      });
+
+      const datos = await respuesta.json();
+
+      if (!respuesta.ok) {
+        throw new Error(datos.message || datos.detail || "No se pudo crear la reserva.");
+      }
+
+      setMisViajes((viajesActuales) => [...viajesActuales, datos]);
+      setReservaConfirmada(true);
+    } catch (error) {
+      setErrorReserva(error.message);
+    }
+  }
+
+  setMisViajes((viajesActuales) => [...viajesActuales, nuevaReserva]);
+  setReservaConfirmada(true);
+
+
+  function volverInicio() {
+    setVista("inicio");
+    setBusquedaRealizada(false);
+  }
+
+  if (!usuario) {
     return (
       <main className="pagina">
         <section className="login">
@@ -82,13 +280,13 @@ function App() {
           <p className="subtitulo">Inicia sesión para gestionar tus viajes.</p>
 
           <form onSubmit={iniciarSesion}>
-            <label htmlFor="usuario">Usuario</label>
+            <label htmlFor="email">Correo electrónico</label>
             <input
-              id="usuario"
-              type="text"
-              value={usuario}
-              onChange={(evento) => setUsuario(evento.target.value)}
-              placeholder="Introduce tu usuario"
+              id="email"
+              type="email"
+              value={email}
+              onChange={(evento) => setEmail(evento.target.value)}
+              placeholder="tu@email.com"
             />
 
             <label htmlFor="contrasena">Contraseña</label>
@@ -131,7 +329,14 @@ function App() {
             Buscar viaje
           </button>
 
-          <button className="enlace-menu">Mis viajes</button>
+          <button
+            className={`enlace-menu ${
+              vista === "misViajes" ? "activo" : ""
+            }`}
+            onClick={() => setVista("misViajes")}
+          >
+            Mis viajes
+          </button>
         </nav>
 
         <button className="boton-salir" onClick={cerrarSesion}>
@@ -145,13 +350,12 @@ function App() {
             <div className="bienvenida">
               <div>
                 <p className="texto-superior">TU ÁREA PERSONAL</p>
-                <h1>Hola, {usuario}</h1>
+                <h1>Hola, {usuario.nombre}</h1>
                 <p>
                   Consulta horarios, encuentra tu próximo destino y gestiona
                   tus reservas.
                 </p>
               </div>
-
               <div className="icono-tren">🚆</div>
             </div>
 
@@ -169,7 +373,10 @@ function App() {
                   <span className="flecha">→</span>
                 </button>
 
-                <button className="tarjeta-opcion">
+                <button
+                  className="tarjeta-opcion"
+                  onClick={() => setVista("misViajes")}
+                >
                   <span className="icono-tarjeta">🎫</span>
                   <strong>Mis viajes</strong>
                   <small>Revisa tus próximas reservas y viajes realizados.</small>
@@ -188,30 +395,44 @@ function App() {
 
             <h1 className="titulo-pagina">Buscar viaje</h1>
             <p className="subtitulo">
-              Indica los datos de tu trayecto para ver los viajes disponibles.
+              Selecciona tu origen, destino y fecha de salida.
             </p>
 
             <form className="formulario-viaje" onSubmit={buscarViajes}>
               <div>
                 <label htmlFor="origen">Origen</label>
-                <input
+                <select
                   id="origen"
-                  type="text"
-                  value={origen}
-                  onChange={(evento) => setOrigen(evento.target.value)}
-                  placeholder="Ejemplo: Madrid"
-                />
+                  value={origenId}
+                  onChange={(evento) => {
+                    setOrigenId(evento.target.value);
+                    setDestinoId("");
+                  }}
+                >
+                  <option value="">Selecciona origen</option>
+                  {origenes.map((origen) => (
+                    <option key={origen.id} value={origen.id}>
+                      {origen.nombre}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div>
                 <label htmlFor="destino">Destino</label>
-                <input
+                <select
                   id="destino"
-                  type="text"
-                  value={destino}
-                  onChange={(evento) => setDestino(evento.target.value)}
-                  placeholder="Ejemplo: Barcelona"
-                />
+                  value={destinoId}
+                  disabled={!origenId}
+                  onChange={(evento) => setDestinoId(evento.target.value)}
+                >
+                  <option value="">Selecciona destino</option>
+                  {destinosDisponibles.map((destino) => (
+                    <option key={destino.id} value={destino.id}>
+                      {destino.nombre}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div>
@@ -233,80 +454,52 @@ function App() {
 
             {busquedaRealizada && (
               <section className="resultados">
-                <h2>
-                  Viajes de {origen} a {destino}
-                </h2>
+                <h2>Viajes disponibles</h2>
 
-                <article className="viaje viaje-detallado">
-                  <div className="viaje-ruta">
-                    <div className="hora-estacion">
-                      <strong>07:30 h</strong>
-                      <span>{origen}</span>
-                      <span className="tren">AVE</span>
-                    </div>
+                {viajes.length === 0 ? (
+                  <p className="sin-resultados">
+                    No hay viajes disponibles para esta búsqueda.
+                  </p>
+                ) : (
+                  viajes.map((viaje) => (
+                    <article className="viaje viaje-detallado" key={viaje.id}>
+                      <div className="viaje-ruta">
+                        <div className="hora-estacion">
+                          <strong>{formatearHora(viaje.horaSalida)} h</strong>
+                          <span>{viaje.origen}</span>
+                          <span className="tren">{viaje.tren}</span>
+                        </div>
 
-                    <div className="conexion">
-                      <span className="duracion-total">2 horas 45 minutos</span>
-                      <div className="linea-ruta"></div>
-                      <span>Directo</span>
-                    </div>
+                        <div className="conexion">
+                          <span className="duracion-total">
+                            Viaje disponible
+                          </span>
+                          <div className="linea-ruta"></div>
+                          <span>{viaje.fecha}</span>
+                        </div>
 
-                    <div className="hora-estacion">
-                      <strong>10:15 h</strong>
-                      <span>{destino}</span>
-                      <span className="tren">AVE</span>
-                    </div>
-                  </div>
+                        <div className="hora-estacion">
+                          <strong>{formatearHora(viaje.horaLlegada)} h</strong>
+                          <span>{viaje.destino}</span>
+                          <span className="tren">{viaje.tren}</span>
+                        </div>
+                      </div>
 
-                  <aside className="disponibilidad disponible">
-                    <span>✓</span>
-                    <strong>Desde 35 €</strong>
-                    <small>Plazas disponibles</small>
-                    <button
-                      onClick={() =>
-                        seleccionarViaje("07:30 h", "10:15 h", "35 €")
-                      }
-                    >
-                      Seleccionar
-                    </button>
-                  </aside>
+                      <aside className="disponibilidad disponible">
+                        <span>✓</span>
+                        <strong>Desde {viaje.precio} €</strong>
+                        <small>{viaje.estado}</small>
+                        <button onClick={() => seleccionarViaje(viaje)}>
+                          Seleccionar
+                        </button>
+                      </aside>
 
-                  <footer className="viaje-pie">
-                    ♿ Plaza H disponible <span>•</span> 🌿 Cero emisiones
-                  </footer>
-                </article>
-
-                <article className="viaje viaje-detallado">
-                  <div className="viaje-ruta">
-                    <div className="hora-estacion">
-                      <strong>10:00 h</strong>
-                      <span>{origen}</span>
-                      <span className="tren">AVE</span>
-                    </div>
-
-                    <div className="conexion">
-                      <span className="duracion-total">3 horas 10 minutos</span>
-                      <div className="linea-ruta"></div>
-                      <span>Directo</span>
-                    </div>
-
-                    <div className="hora-estacion">
-                      <strong>13:10 h</strong>
-                      <span>{destino}</span>
-                      <span className="tren">ALVIA</span>
-                    </div>
-                  </div>
-
-                  <aside className="disponibilidad completo">
-                    <span>!</span>
-                    <strong>Tren completo</strong>
-                    <small>No quedan plazas</small>
-                  </aside>
-
-                  <footer className="viaje-pie">
-                    ♿ Plaza H disponible <span>•</span> 🌿 Cero emisiones
-                  </footer>
-                </article>
+                      <footer className="viaje-pie">
+                        ♿ Plaza H disponible <span>•</span> 🌿 Cero emisiones
+                      </footer>
+                    </article>
+                  ))
+                )}
               </section>
             )}
           </>
@@ -320,8 +513,10 @@ function App() {
 
             <h1 className="titulo-pagina">Selecciona tu asiento</h1>
             <p className="subtitulo">
-              {origen} ({viajeSeleccionado?.horaSalida}) → {destino} (
-              {viajeSeleccionado?.horaLlegada})
+              {viajeSeleccionado?.origen} (
+              {formatearHora(viajeSeleccionado?.horaSalida)} h) →{" "}
+              {viajeSeleccionado?.destino} (
+              {formatearHora(viajeSeleccionado?.horaLlegada)} h)
             </p>
 
             <section className="leyenda-asientos">
@@ -330,39 +525,43 @@ function App() {
               <span><i className="asiento elegido"></i> Seleccionado</span>
             </section>
 
-            {[1, 2].map((numeroVagon) => (
-              <section className="vagon" key={numeroVagon}>
-                <h2>Vagón {numeroVagon}</h2>
+            {cargandoAsientos && <p>Cargando asientos disponibles...</p>}
 
-                <div className="asientos">
-                  {Array.from({ length: 24 }, (_, indice) => {
-                    const fila = Math.floor(indice / 4) + 1;
-                    const letra = letrasAsiento[indice % 4];
-                    const asiento = `V${numeroVagon}-${fila}${letra}`;
-                    const ocupado = asientosOcupados.includes(asiento);
-                    const seleccionado = asientoSeleccionado === asiento;
+            {errorAsientos && <p className="error">{errorAsientos}</p>}
 
-                    return (
-                      <button
-                        key={asiento}
-                        disabled={ocupado}
-                        onClick={() => seleccionarAsiento(asiento, ocupado)}
-                        className={`asiento ${
-                          ocupado
-                            ? "ocupado"
-                            : seleccionado
-                              ? "elegido"
-                              : "libre"
-                        }`}
-                      >
-                        {fila}
-                        {letra}
-                      </button>
-                    );
-                  })}
-                </div>
-              </section>
-            ))}
+            {!cargandoAsientos &&
+              !errorAsientos &&
+              vagones.map((vagon) => (
+                <section className="vagon" key={vagon.vagon}>
+                  <h2>Vagón {vagon.vagon}</h2>
+
+                  <div className="asientos">
+                    {vagon.asientos.map((asiento) => {
+                      const seleccionado =
+                        asientoSeleccionado === asiento.asiento;
+
+                      return (
+                        <button
+                          key={asiento.asiento}
+                          disabled={asiento.ocupado}
+                          onClick={() =>
+                            seleccionarAsiento(asiento.asiento, asiento.ocupado)
+                          }
+                          className={`asiento ${
+                            asiento.ocupado
+                              ? "ocupado"
+                              : seleccionado
+                                ? "elegido"
+                                : "libre"
+                          }`}
+                        >
+                          {asiento.asiento.replace(`V${vagon.vagon}-`, "")}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </section>
+              ))}
 
             <section className="resumen-asiento">
               <div>
@@ -372,16 +571,126 @@ function App() {
 
               <div>
                 <strong>Precio del viaje</strong>
-                <p>{viajeSeleccionado?.precio}</p>
+                <p>{viajeSeleccionado?.precio} €</p>
               </div>
 
               <button
                 className="boton-principal"
                 disabled={!asientoSeleccionado}
+                onClick={() => setVista("confirmacion")}
               >
                 Continuar
               </button>
             </section>
+          </>
+        )}
+
+        {vista === "confirmacion" && (
+          <>
+            <button className="volver" onClick={() => setVista("asientos")}>
+              ← Volver a los asientos
+            </button>
+
+            {!reservaConfirmada ? (
+              <section className="confirmacion">
+                <p className="marca">RESUMEN DE RESERVA</p>
+                <h1>Confirma tu viaje</h1>
+
+                <div className="datos-reserva">
+                  <div>
+                    <span>Trayecto</span>
+                    <strong>
+                      {viajeSeleccionado?.origen} → {viajeSeleccionado?.destino}
+                    </strong>
+                  </div>
+
+                  <div>
+                    <span>Horario</span>
+                    <strong>
+                      {formatearHora(viajeSeleccionado?.horaSalida)} h →{" "}
+                      {formatearHora(viajeSeleccionado?.horaLlegada)} h
+                    </strong>
+                  </div>
+
+                  <div>
+                    <span>Asiento</span>
+                    <strong>{asientoSeleccionado}</strong>
+                  </div>
+
+                  <div>
+                    <span>Precio</span>
+                    <strong>{viajeSeleccionado?.precio} €</strong>
+                  </div>
+                </div>
+
+                {errorReserva && <p className="error">{errorReserva}</p>}
+                <button className="boton-principal" onClick={confirmarReserva}>
+                  Confirmar reserva
+                </button>
+              </section>
+            ) : (
+              <section className="confirmacion reserva-exitosa">
+                <div className="icono-exito">✓</div>
+                <p className="marca">RESERVA CONFIRMADA</p>
+                <h1>¡Tu viaje está reservado!</h1>
+                <p className="subtitulo">
+                  Tu asiento {asientoSeleccionado} ha quedado reservado.
+                </p>
+
+                <button className="boton-principal" onClick={volverInicio}>
+                  Volver al inicio
+                </button>
+              </section>
+            )}
+          </>
+        )}
+
+        {vista === "misViajes" && (
+          <>
+            <button className="volver" onClick={volverInicio}>
+              ← Volver al inicio
+            </button>
+
+            <h1 className="titulo-pagina">Mis viajes</h1>
+
+            {misViajes.length === 0 ? (
+              <section className="sin-viajes">
+                <div>🎫</div>
+                <h2>Aún no tienes viajes reservados</h2>
+                <p>Cuando confirmes una reserva, aparecerá aquí.</p>
+              </section>
+            ) : (
+              <section className="lista-mis-viajes">
+                {misViajes.map((viaje) => (
+                  <article className="mi-viaje" key={viaje.id}>
+                    <div className="fecha-viaje">
+                      <span>Fecha</span>
+                      <strong>{viaje.fecha}</strong>
+                    </div>
+
+                    <div className="trayecto-viaje">
+                      <strong>
+                        {formatearHora(viaje.horaSalida)} h —{" "}
+                        {formatearHora(viaje.horaLlegada)} h
+                      </strong>
+                      <span>
+                        {viaje.origen} → {viaje.destino}
+                      </span>
+                    </div>
+
+                    <div className="detalle-viaje">
+                      <span>Asiento</span>
+                      <strong>{viaje.asiento}</strong>
+                    </div>
+
+                    <div className="precio-viaje">
+                      <span>Precio</span>
+                      <strong>{viaje.precio} €</strong>
+                    </div>
+                  </article>
+                ))}
+              </section>
+            )}
           </>
         )}
       </section>
